@@ -44,24 +44,32 @@ TaskFlow is a web-based task management system that allows users to create, orga
 ## 📁 Project Structure
 
 ```
-taskflow-cp476/
-├── docs/                    # Documentation and wireframes
-│   ├── wireframes/
-│   └── meeting-notes/
-├── frontend/                # Client-side code
+taskflow/
+├── frontend/                    # Front-end static files
 │   ├── css/
+│   │   └── style.css          # Main stylesheet
 │   ├── js/
-│   └── index.html
-├── backend/                 # Server-side code
-│   ├── routes/
+│   │   ├── auth.js            # Login/register form handling
+│   │   └── app.js             # Dashboard and task management
+│   ├── login.html             # Login page
+│   ├── register.html          # Registration page
+│   └── dashboard.html         # Main task dashboard
+├── server/                    # Back-end server files
+│   ├── config/
+│   │   └── database.js        # MySQL connection configuration
 │   ├── controllers/
-│   └── server.js
-├── database/                # SQL scripts
-│   └── schema.sql
-├── tests/                   # Test files
-├── .gitignore
-├── README.md
-└── LICENSE
+│   │   ├── authController.js  # Authentication logic
+│   │   └── taskController.js  # Task CRUD logic
+│   ├── routes/
+│   │   ├── authRoutes.js      # Auth API routes
+│   │   └── taskRoutes.js      # Task API routes
+│   └── server.js              # Express server entry point
+├── docs/
+│   ├── schema.sql             # Database CREATE TABLE statements
+│   └── TaskFlow_Database_Design.pdf  # ER diagram + schema docs
+├── package.json
+├── .env.example               # Environment variable template
+└── README.md
 ```
 
 ---
