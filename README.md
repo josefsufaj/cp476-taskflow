@@ -74,15 +74,69 @@ taskflow-cp476/
 - MySQL (8.0+)
 - Web browser (Chrome, Firefox, Safari, or Edge)
 
-### Installation
 
-*Setup instructions will be added in Milestone 02.*
+## How to Run Locally
+
+### Prerequisites
+
+- **Node.js** (v18 or later)
+- **npm** (included with Node.js)
+- **MySQL** (v8.0 or later)
+
+### Step 1: Clone the Repository
 
 ```bash
-
+git clone https://github.com/josefsufaj/cp476-taskflow.git
+cd cp476-taskflow
 ```
 
----
+### Step 2: Install Dependencies
+
+```bash
+npm install
+```
+
+### Step 3: Set Up the Database
+
+1. Open MySQL and run the schema file:
+
+```bash
+mysql -u root -p < docs/schema.sql
+```
+
+2. Copy the environment template and update with your MySQL credentials:
+
+```bash
+cp .env.example .env
+```
+
+Edit `.env` with your database password and a session secret.
+
+### Step 4: Start the Server
+
+```bash
+npm start
+```
+
+The application will be available at **http://localhost:3000**.
+
+### Running the Front-End Only (No Database)
+
+The front-end can run independently using mock data stored in the browser's localStorage. Simply open `public/login.html` in a browser or start the server and navigate to http://localhost:3000.
+
+## API Endpoints
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/auth/register` | Register a new user |
+| POST | `/api/auth/login` | Log in a user |
+| POST | `/api/auth/logout` | Log out the current user |
+| GET | `/api/auth/me` | Get current user info |
+| GET | `/api/tasks` | Get all tasks (with optional filters) |
+| GET | `/api/tasks/:id` | Get a single task |
+| POST | `/api/tasks` | Create a new task |
+| PUT | `/api/tasks/:id` | Update a task |
+| DELETE | `/api/tasks/:id` | Delete a task |
 
 ## 📋 Project Links
 
