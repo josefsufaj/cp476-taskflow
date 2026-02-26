@@ -148,9 +148,9 @@ The front-end can run independently using mock data stored in the browser's loca
 
 ## 📋 Project Links
 
-- **GitHub Repository**: 
-- **Project Board (Kanban)**: 
-- **Wiki / Documentation**: 
+- **GitHub Repository**: https://github.com/josefsufaj/cp476-taskflow
+- **Project Board (Kanban)**: https://github.com/users/josefsufaj/projects/1
+- **Wiki / Documentation**: https://github.com/josefsufaj/cp476-taskflow/tree/main/docs
 
 ---
 
