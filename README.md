@@ -33,11 +33,9 @@ TaskFlow is a web-based task management system that allows users to create, orga
 | Layer | Technology |
 |-------|------------|
 | Front-End | HTML5, CSS3, JavaScript (Vanilla) |
-| Back-End | *Node.js / PHP (TBD)* |
+| Back-End | Node.js |
 | Database | MySQL |
 | Version Control | Git / GitHub |
-
-*Note: Specific back-end technology to be confirmed based on course coverage.*
 
 ---
 
@@ -78,7 +76,7 @@ taskflow/
 
 ### Prerequisites
 
-- Node.js (v18+) or PHP (8.0+)
+- Node.js (v18+)
 - MySQL (8.0+)
 - Web browser (Chrome, Firefox, Safari, or Edge)
 
@@ -178,4 +176,4 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ---
 
-*Last updated: January 30, 2026*
+*Last updated: February 26, 2026*
