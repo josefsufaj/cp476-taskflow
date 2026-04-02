@@ -17,6 +17,8 @@ try {
     console.log('dotenv not configured, using defaults.');
 }
 
+const { testConnection } = require('./config/database');
+
 // Import route modules
 const authRoutes = require('./routes/authRoutes');
 const taskRoutes = require('./routes/taskRoutes');
@@ -45,8 +47,8 @@ app.use(session({
     }
 }));
 
-// Serve static files from the public directory
-app.use(express.static(path.join(__dirname, '..', 'frontend')));
+// Serve static files from the front-end directory
+app.use(express.static(path.join(__dirname, '..', 'Frontend')));
 
 // ---- API Routes ----
 
@@ -77,11 +79,21 @@ app.use(function (err, req, res, next) {
 });
 
 // ---- Start Server ----
-app.listen(PORT, function () {
-    console.log('=================================');
-    console.log('  TaskFlow Server');
-    console.log('  Running on http://localhost:' + PORT);
-    console.log('=================================');
-});
+async function startServer() {
+    var dbConnected = await testConnection();
+
+    if (!dbConnected) {
+        console.warn('Starting server without a verified database connection.');
+    }
+
+    app.listen(PORT, function () {
+        console.log('=================================');
+        console.log('  TaskFlow Server');
+        console.log('  Running on http://localhost:' + PORT);
+        console.log('=================================');
+    });
+}
+
+startServer();
 
 module.exports = app;
