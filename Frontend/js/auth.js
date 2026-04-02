@@ -5,19 +5,90 @@
  */
 
 document.addEventListener('DOMContentLoaded', function () {
-
     // ---- Login Form Handler ----
     var loginForm = document.getElementById('loginForm');
-    if (loginForm) {
-        initLoginPage();
-    }
 
     // ---- Register Form Handler ----
     var registerForm = document.getElementById('registerForm');
-    if (registerForm) {
-        initRegisterPage();
+
+    if (!loginForm && !registerForm) {
+        return;
     }
+
+    fetchCurrentUser()
+        .then(function (user) {
+            if (user) {
+                sessionStorage.setItem('user', JSON.stringify(user));
+                window.location.href = 'dashboard.html';
+                return;
+            }
+
+            if (loginForm) {
+                initLoginPage();
+            }
+
+            if (registerForm) {
+                initRegisterPage();
+            }
+        })
+        .catch(function () {
+            if (loginForm) {
+                initLoginPage();
+            }
+
+            if (registerForm) {
+                initRegisterPage();
+            }
+        });
 });
+
+/**
+ * Send an API request and normalize JSON success/error handling.
+ */
+function apiRequest(url, options) {
+    var requestOptions = Object.assign({
+        credentials: 'same-origin'
+    }, options || {});
+
+    requestOptions.headers = Object.assign({
+        'Content-Type': 'application/json'
+    }, requestOptions.headers || {});
+
+    return fetch(url, requestOptions)
+        .then(function (response) {
+            return response
+                .json()
+                .catch(function () {
+                    return {};
+                })
+                .then(function (data) {
+                    if (!response.ok || !data.success) {
+                        var error = new Error(data.message || 'Request failed.');
+                        error.status = response.status;
+                        throw error;
+                    }
+
+                    return data;
+                });
+        });
+}
+
+/**
+ * Fetch the currently authenticated user from the server session.
+ */
+function fetchCurrentUser() {
+    return apiRequest('/api/auth/me')
+        .then(function (data) {
+            return data.user;
+        })
+        .catch(function (error) {
+            if (error.status === 401) {
+                return null;
+            }
+
+            throw error;
+        });
+}
 
 /**
  * Initialize the login page functionality.
@@ -71,52 +142,21 @@ function initLoginPage() {
         }
 
         // Send login request to the server
-        fetch('/api/auth/login', {
+        apiRequest('/api/auth/login', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ email: email, password: password })
         })
-        .then(function (response) {
-            return response.json();
-        })
-        .then(function (data) {
-            if (data.success) {
+            .then(function (data) {
                 // Store session info and redirect to dashboard
                 sessionStorage.setItem('user', JSON.stringify(data.user));
                 window.location.href = 'dashboard.html';
-            } else {
+            })
+            .catch(function (error) {
                 // Show generic error (do not reveal which field is wrong)
-                loginAlert.textContent = data.message || 'Invalid email or password.';
+                loginAlert.textContent = error.message || 'Invalid email or password.';
                 loginAlert.classList.add('visible');
-            }
-        })
-        .catch(function () {
-            // For Milestone 02: mock login with local storage
-            mockLogin(email, password);
-        });
+            });
     });
-
-    /**
-     * Mock login using localStorage (for front-end demo without live server).
-     */
-    function mockLogin(email, password) {
-        var users = JSON.parse(localStorage.getItem('taskflow_users') || '[]');
-        var user = users.find(function (u) {
-            return u.email === email && u.password === password;
-        });
-
-        if (user) {
-            sessionStorage.setItem('user', JSON.stringify({
-                id: user.id,
-                username: user.username,
-                email: user.email
-            }));
-            window.location.href = 'dashboard.html';
-        } else {
-            loginAlert.textContent = 'Invalid email or password.';
-            loginAlert.classList.add('visible');
-        }
-    }
 }
 
 /**
@@ -170,64 +210,22 @@ function initRegisterPage() {
         }
 
         // Send registration request to the server
-        fetch('/api/auth/register', {
+        apiRequest('/api/auth/register', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 username: username,
                 email: email,
                 password: password
             })
         })
-        .then(function (response) {
-            return response.json();
-        })
-        .then(function (data) {
-            if (data.success) {
+            .then(function () {
                 window.location.href = 'login.html?registered=true';
-            } else {
-                registerAlert.textContent = data.message || 'Registration failed. Please try again.';
+            })
+            .catch(function (error) {
+                registerAlert.textContent = error.message || 'Registration failed. Please try again.';
                 registerAlert.classList.add('visible');
-            }
-        })
-        .catch(function () {
-            // For Milestone 02: mock registration with localStorage
-            mockRegister(username, email, password);
-        });
+            });
     });
-
-    /**
-     * Mock registration using localStorage (for front-end demo without live server).
-     */
-    function mockRegister(username, email, password) {
-        var users = JSON.parse(localStorage.getItem('taskflow_users') || '[]');
-
-        // Check for duplicate email or username
-        var duplicate = users.find(function (u) {
-            return u.email === email || u.username === username;
-        });
-
-        if (duplicate) {
-            registerAlert.textContent = 'An account with that email or username already exists.';
-            registerAlert.classList.add('visible');
-            return;
-        }
-
-        // Create new user
-        var newUser = {
-            id: Date.now(),
-            username: username,
-            email: email,
-            password: password,
-            created_at: new Date().toISOString()
-        };
-
-        users.push(newUser);
-        localStorage.setItem('taskflow_users', JSON.stringify(users));
-
-        // Redirect to login with success message
-        window.location.href = 'login.html?registered=true';
-    }
 }
 
 // ---- Utility Functions ----
@@ -265,6 +263,7 @@ function clearErrors() {
     errors.forEach(function (el) {
         el.classList.remove('visible');
     });
+
     var alerts = document.querySelectorAll('.alert');
     alerts.forEach(function (el) {
         el.classList.remove('visible');
