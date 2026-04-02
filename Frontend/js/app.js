@@ -1,33 +1,93 @@
 /**
  * TaskFlow - Dashboard Application Module
  * Handles task CRUD operations, filtering, and UI interactions.
- * Uses mock data via localStorage for Milestone 02 (will connect to API in Milestone 03).
+ * Uses the API for all task and session state.
  * CP476A Internet Computing - Winter 2026
  */
 
 document.addEventListener('DOMContentLoaded', function () {
-    // Check if user is logged in
-    var user = JSON.parse(sessionStorage.getItem('user'));
-    if (!user) {
-        window.location.href = 'login.html';
-        return;
-    }
-
-    // Display username in header
-    document.getElementById('usernameDisplay').textContent = user.username;
-
-    // Initialize the dashboard
-    initDashboard(user);
+    bootstrapDashboard();
 });
+
+/**
+ * Send an API request and normalize JSON success/error handling.
+ */
+function apiRequest(url, options) {
+    var requestOptions = Object.assign({
+        credentials: 'same-origin'
+    }, options || {});
+
+    requestOptions.headers = Object.assign({
+        'Content-Type': 'application/json'
+    }, requestOptions.headers || {});
+
+    return fetch(url, requestOptions)
+        .then(function (response) {
+            return response
+                .json()
+                .catch(function () {
+                    return {};
+                })
+                .then(function (data) {
+                    if (!response.ok || !data.success) {
+                        var error = new Error(data.message || 'Request failed.');
+                        error.status = response.status;
+                        throw error;
+                    }
+
+                    return data;
+                });
+        });
+}
+
+/**
+ * Fetch the currently authenticated user from the server session.
+ */
+function fetchCurrentUser() {
+    return apiRequest('/api/auth/me')
+        .then(function (data) {
+            return data.user;
+        })
+        .catch(function (error) {
+            if (error.status === 401) {
+                return null;
+            }
+
+            throw error;
+        });
+}
+
+/**
+ * Verify the current session before initializing the dashboard.
+ */
+function bootstrapDashboard() {
+    fetchCurrentUser()
+        .then(function (user) {
+            if (!user) {
+                sessionStorage.removeItem('user');
+                window.location.href = 'login.html';
+                return;
+            }
+
+            sessionStorage.setItem('user', JSON.stringify(user));
+            document.getElementById('usernameDisplay').textContent = user.username;
+            initDashboard();
+        })
+        .catch(function () {
+            sessionStorage.removeItem('user');
+            window.location.href = 'login.html';
+        });
+}
 
 /**
  * Main initialization function for the dashboard.
  * Sets up event listeners and renders the initial task list.
  */
-function initDashboard(user) {
+function initDashboard() {
     // DOM element references
     var addTaskBtn = document.getElementById('addTaskBtn');
     var emptyAddTaskBtn = document.getElementById('emptyAddTaskBtn');
+    var dashboardAlert = document.getElementById('dashboardAlert');
     var logoutBtn = document.getElementById('logoutBtn');
     var filterStatus = document.getElementById('filterStatus');
     var filterPriority = document.getElementById('filterPriority');
@@ -47,6 +107,7 @@ function initDashboard(user) {
     var deleteConfirmBtn = document.getElementById('deleteConfirmBtn');
 
     // State
+    var tasks = [];
     var editingTaskId = null;
     var deletingTaskId = null;
 
@@ -62,13 +123,22 @@ function initDashboard(user) {
 
     // Logout
     logoutBtn.addEventListener('click', function () {
-        sessionStorage.removeItem('user');
-        window.location.href = 'login.html';
+        apiRequest('/api/auth/logout', {
+            method: 'POST',
+            body: JSON.stringify({})
+        })
+            .catch(function () {
+                return null;
+            })
+            .finally(function () {
+                sessionStorage.removeItem('user');
+                window.location.href = 'login.html';
+            });
     });
 
     // Filter changes
-    filterStatus.addEventListener('change', renderTasks);
-    filterPriority.addEventListener('change', renderTasks);
+    filterStatus.addEventListener('change', loadTasks);
+    filterPriority.addEventListener('change', loadTasks);
 
     // Task modal close/cancel
     taskModalClose.addEventListener('click', closeTaskModal);
@@ -92,7 +162,7 @@ function initDashboard(user) {
         e.preventDefault();
         handleTaskSubmit();
     });
-
+    
     // Delete confirmation
     deleteConfirmBtn.addEventListener('click', function () {
         handleDeleteConfirm();
@@ -163,21 +233,80 @@ function initDashboard(user) {
     // ---- Task CRUD Operations ----
 
     /**
-     * Get all tasks for the current user from localStorage.
-     * @returns {Array} Array of task objects
+     * Find a task in the current in-memory list.
+     * @param {number} taskId - ID of the task
+     * @returns {object|null} Matching task or null
      */
-    function getTasks() {
-        var key = 'taskflow_tasks_' + user.id;
-        return JSON.parse(localStorage.getItem(key) || '[]');
+    function findTask(taskId) {
+        return tasks.find(function (task) {
+            return task.id === taskId;
+        }) || null;
+    }
+
+    function showDashboardAlert(message) {
+        if (!dashboardAlert) {
+            return;
+        }
+
+        dashboardAlert.textContent = message;
+        dashboardAlert.classList.add('visible');
+    }
+
+    function clearDashboardAlert() {
+        if (!dashboardAlert) {
+            return;
+        }
+
+        dashboardAlert.textContent = '';
+        dashboardAlert.classList.remove('visible');
+    }
+
+    function handleUnauthorized(error) {
+        if (error.status === 401) {
+            sessionStorage.removeItem('user');
+            window.location.href = 'login.html';
+            return true;
+        }
+
+        return false;
     }
 
     /**
-     * Save tasks array to localStorage for the current user.
-     * @param {Array} tasks - Array of task objects
+     * Load tasks for the current user from the API.
      */
-    function saveTasks(tasks) {
-        var key = 'taskflow_tasks_' + user.id;
-        localStorage.setItem(key, JSON.stringify(tasks));
+    function loadTasks() {
+        clearDashboardAlert();
+
+        var query = new URLSearchParams();
+
+        if (filterStatus.value !== 'all') {
+            query.set('status', filterStatus.value);
+        }
+
+        if (filterPriority.value !== 'all') {
+            query.set('priority', filterPriority.value);
+        }
+
+        var url = '/api/tasks';
+        if (query.toString()) {
+            url += '?' + query.toString();
+        }
+
+        apiRequest(url)
+            .then(function (data) {
+                tasks = data.tasks || [];
+                renderTasks();
+            })
+            .catch(function (error) {
+                tasks = [];
+                renderTasks();
+
+                if (handleUnauthorized(error)) {
+                    return;
+                }
+
+                showDashboardAlert(error.message || 'Failed to load tasks.');
+            });
     }
 
     /**
@@ -207,6 +336,7 @@ function initDashboard(user) {
             var today = new Date();
             today.setHours(0, 0, 0, 0);
             var selectedDate = new Date(dueDate + 'T00:00:00');
+
             if (selectedDate < today) {
                 document.getElementById('taskDueDateError').textContent = 'Due date cannot be in the past.';
                 showFormError('taskDueDateError');
@@ -218,61 +348,65 @@ function initDashboard(user) {
             return;
         }
 
-        var tasks = getTasks();
+        clearDashboardAlert();
 
-        if (editingTaskId) {
-            // Update existing task
-            tasks = tasks.map(function (task) {
-                if (task.id === editingTaskId) {
-                    return {
-                        id: task.id,
-                        user_id: user.id,
-                        title: title,
-                        description: description,
-                        due_date: dueDate,
-                        priority: priority,
-                        status: status,
-                        created_at: task.created_at,
-                        updated_at: new Date().toISOString()
-                    };
-                }
-                return task;
+        var payload = {
+            title: title,
+            description: description,
+            due_date: dueDate,
+            priority: priority,
+            status: editingTaskId ? status : 'pending'
+        };
+
+        var request = editingTaskId
+            ? apiRequest('/api/tasks/' + editingTaskId, {
+                method: 'PUT',
+                body: JSON.stringify(payload)
+            })
+            : apiRequest('/api/tasks', {
+                method: 'POST',
+                body: JSON.stringify(payload)
             });
-        } else {
-            // Create new task
-            var newTask = {
-                id: Date.now(),
-                user_id: user.id,
-                title: title,
-                description: description,
-                due_date: dueDate,
-                priority: priority,
-                status: 'pending',
-                created_at: new Date().toISOString(),
-                updated_at: new Date().toISOString()
-            };
-            tasks.push(newTask);
-        }
 
-        saveTasks(tasks);
-        closeTaskModal();
-        renderTasks();
+        request
+            .then(function () {
+                closeTaskModal();
+                loadTasks();
+            })
+            .catch(function (error) {
+                if (handleUnauthorized(error)) {
+                    return;
+                }
+
+                showDashboardAlert(error.message || 'Failed to save task.');
+            });
     }
 
     /**
      * Handle delete confirmation.
      */
     function handleDeleteConfirm() {
-        if (!deletingTaskId) return;
+        if (!deletingTaskId) {
+            return;
+        }
 
-        var tasks = getTasks();
-        tasks = tasks.filter(function (task) {
-            return task.id !== deletingTaskId;
-        });
+        clearDashboardAlert();
 
-        saveTasks(tasks);
-        closeDeleteModal();
-        renderTasks();
+        apiRequest('/api/tasks/' + deletingTaskId, {
+            method: 'DELETE',
+            body: JSON.stringify({})
+        })
+            .then(function () {
+                closeDeleteModal();
+                loadTasks();
+            })
+            .catch(function (error) {
+                if (handleUnauthorized(error)) {
+                    return;
+                }
+
+                showDashboardAlert(error.message || 'Failed to delete task.');
+            });
     }
 
     /**
@@ -280,16 +414,35 @@ function initDashboard(user) {
      * @param {number} taskId - ID of the task
      */
     function toggleTaskComplete(taskId) {
-        var tasks = getTasks();
-        tasks = tasks.map(function (task) {
-            if (task.id === taskId) {
-                task.status = task.status === 'completed' ? 'pending' : 'completed';
-                task.updated_at = new Date().toISOString();
-            }
-            return task;
-        });
-        saveTasks(tasks);
-        renderTasks();
+        var task = findTask(taskId);
+
+        if (!task) {
+            return;
+        }
+
+        clearDashboardAlert();
+
+        apiRequest('/api/tasks/' + taskId, {
+            method: 'PUT',
+            body: JSON.stringify({
+                title: task.title,
+                description: task.description || '',
+                due_date: task.due_date || '',
+                priority: task.priority,
+                status: task.status === 'completed' ? 'pending' : 'completed'
+            })
+        })
+            .then(function () {
+                loadTasks();
+            })
+            .catch(function (error) {
+                if (handleUnauthorized(error)) {
+                    return;
+                }
+
+                showDashboardAlert(error.message || 'Failed to update task.');
+                loadTasks();
+            });
     }
 
     // ---- Rendering ----
@@ -298,41 +451,22 @@ function initDashboard(user) {
      * Render the task list based on current filters.
      */
     function renderTasks() {
-        var tasks = getTasks();
-        var statusFilter = filterStatus.value;
-        var priorityFilter = filterPriority.value;
-
-        // Apply filters
-        var filtered = tasks.filter(function (task) {
-            var matchStatus = statusFilter === 'all' || task.status === statusFilter;
-            var matchPriority = priorityFilter === 'all' || task.priority === priorityFilter;
-            return matchStatus && matchPriority;
-        });
-
-        // Sort by due date (soonest first), then by created_at
-        filtered.sort(function (a, b) {
-            if (a.due_date && b.due_date) {
-                return new Date(a.due_date) - new Date(b.due_date);
-            }
-            if (a.due_date && !b.due_date) return -1;
-            if (!a.due_date && b.due_date) return 1;
-            return new Date(b.created_at) - new Date(a.created_at);
-        });
-
         var taskListEl = document.getElementById('taskList');
         var emptyState = document.getElementById('emptyState');
         var taskListHeader = document.getElementById('taskListHeader');
+        var hasActiveFilters = filterStatus.value !== 'all' || filterPriority.value !== 'all';
 
         // Show/hide empty state
-        if (filtered.length === 0) {
+        if (tasks.length === 0) {
             taskListEl.innerHTML = '';
             taskListHeader.style.display = 'none';
-            if (tasks.length === 0) {
-                emptyState.querySelector('h3').textContent = 'No tasks yet';
-                emptyState.querySelector('p').textContent = 'Get started by creating your first task';
-            } else {
+
+            if (hasActiveFilters) {
                 emptyState.querySelector('h3').textContent = 'No tasks found';
                 emptyState.querySelector('p').textContent = 'Try adjusting your filters';
+            } else {
+                emptyState.querySelector('h3').textContent = 'No tasks yet';
+                emptyState.querySelector('p').textContent = 'Get started by creating your first task';
             }
             emptyState.style.display = 'flex';
             return;
@@ -343,7 +477,7 @@ function initDashboard(user) {
 
         // Build task list HTML
         var html = '';
-        filtered.forEach(function (task) {
+        tasks.forEach(function (task) {
             var isCompleted = task.status === 'completed';
             var isOverdue = !isCompleted && task.due_date && new Date(task.due_date + 'T23:59:59') < new Date();
 
@@ -398,7 +532,7 @@ function initDashboard(user) {
         var checkboxes = document.querySelectorAll('.task-checkbox');
         checkboxes.forEach(function (cb) {
             cb.addEventListener('change', function () {
-                var taskId = parseInt(this.getAttribute('data-task-id'));
+                var taskId = parseInt(this.getAttribute('data-task-id'), 10);
                 toggleTaskComplete(taskId);
             });
         });
@@ -407,9 +541,8 @@ function initDashboard(user) {
         var editBtns = document.querySelectorAll('.edit-btn');
         editBtns.forEach(function (btn) {
             btn.addEventListener('click', function () {
-                var taskId = parseInt(this.getAttribute('data-task-id'));
-                var tasks = getTasks();
-                var task = tasks.find(function (t) { return t.id === taskId; });
+                var taskId = parseInt(this.getAttribute('data-task-id'), 10);
+                var task = findTask(taskId);
                 if (task) {
                     openTaskModal('edit', task);
                 }
@@ -420,9 +553,8 @@ function initDashboard(user) {
         var deleteBtns = document.querySelectorAll('.btn-delete');
         deleteBtns.forEach(function (btn) {
             btn.addEventListener('click', function () {
-                var taskId = parseInt(this.getAttribute('data-task-id'));
-                var tasks = getTasks();
-                var task = tasks.find(function (t) { return t.id === taskId; });
+                var taskId = parseInt(this.getAttribute('data-task-id'), 10);
+                var task = findTask(taskId);
                 if (task) {
                     openDeleteModal(taskId, task.title);
                 }
@@ -439,7 +571,7 @@ function initDashboard(user) {
         var parts = dateStr.split('-');
         var months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
                       'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-        return months[parseInt(parts[1]) - 1] + ' ' + parseInt(parts[2]) + ', ' + parts[0];
+        return months[parseInt(parts[1], 10) - 1] + ' ' + parseInt(parts[2], 10) + ', ' + parts[0];
     }
 
     /**
@@ -468,7 +600,9 @@ function initDashboard(user) {
      */
     function showFormError(errorId) {
         var el = document.getElementById(errorId);
-        if (el) el.classList.add('visible');
+        if (el) {
+            el.classList.add('visible');
+        }
     }
 
     /**
@@ -482,5 +616,5 @@ function initDashboard(user) {
     }
 
     // ---- Initial Render ----
-    renderTasks();
+    loadTasks();
 }
