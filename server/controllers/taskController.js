@@ -118,13 +118,14 @@ async function getTaskForUser(taskId, userId) {
 /**
  * GET /api/tasks
  * Retrieve all tasks for the authenticated user.
- * Supports optional query parameters: ?status=pending&priority=high
+ * Supports optional query parameters: ?status=pending&priority=high&search=report
  */
 async function getAllTasks(req, res) {
     try {
         var userId = req.session.userId;
         var status = req.query.status;
         var priority = req.query.priority;
+        var search = normalizeString(req.query.search);
         var validStatuses = ['pending', 'in_progress', 'completed'];
         var validPriorities = ['low', 'medium', 'high'];
         var query = TASK_SELECT + '\nWHERE user_id = ?';
@@ -152,6 +153,11 @@ async function getAllTasks(req, res) {
 
             query += '\nAND priority = ?';
             params.push(priority);
+        }
+
+        if (search) {
+            query += '\nAND (title LIKE ? OR description LIKE ?)';
+            params.push('%' + search + '%', '%' + search + '%');
         }
 
         query += '\nORDER BY due_date IS NULL, due_date ASC, created_at DESC';

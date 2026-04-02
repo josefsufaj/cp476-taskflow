@@ -89,6 +89,7 @@ function initDashboard() {
     var emptyAddTaskBtn = document.getElementById('emptyAddTaskBtn');
     var dashboardAlert = document.getElementById('dashboardAlert');
     var logoutBtn = document.getElementById('logoutBtn');
+    var taskSearch = document.getElementById('taskSearch');
     var filterStatus = document.getElementById('filterStatus');
     var filterPriority = document.getElementById('filterPriority');
 
@@ -110,6 +111,7 @@ function initDashboard() {
     var tasks = [];
     var editingTaskId = null;
     var deletingTaskId = null;
+    var searchDebounceTimer = null;
 
     // ---- Event Listeners ----
 
@@ -139,6 +141,15 @@ function initDashboard() {
     // Filter changes
     filterStatus.addEventListener('change', loadTasks);
     filterPriority.addEventListener('change', loadTasks);
+    taskSearch.addEventListener('input', function () {
+        if (searchDebounceTimer) {
+            clearTimeout(searchDebounceTimer);
+        }
+
+        searchDebounceTimer = setTimeout(function () {
+            loadTasks();
+        }, 250);
+    });
 
     // Task modal close/cancel
     taskModalClose.addEventListener('click', closeTaskModal);
@@ -278,6 +289,7 @@ function initDashboard() {
         clearDashboardAlert();
 
         var query = new URLSearchParams();
+        var searchValue = taskSearch.value.trim();
 
         if (filterStatus.value !== 'all') {
             query.set('status', filterStatus.value);
@@ -285,6 +297,10 @@ function initDashboard() {
 
         if (filterPriority.value !== 'all') {
             query.set('priority', filterPriority.value);
+        }
+
+        if (searchValue) {
+            query.set('search', searchValue);
         }
 
         var url = '/api/tasks';
@@ -455,13 +471,20 @@ function initDashboard() {
         var emptyState = document.getElementById('emptyState');
         var taskListHeader = document.getElementById('taskListHeader');
         var hasActiveFilters = filterStatus.value !== 'all' || filterPriority.value !== 'all';
+        var hasSearch = taskSearch.value.trim() !== '';
 
         // Show/hide empty state
         if (tasks.length === 0) {
             taskListEl.innerHTML = '';
             taskListHeader.style.display = 'none';
 
-            if (hasActiveFilters) {
+            if (hasSearch && hasActiveFilters) {
+                emptyState.querySelector('h3').textContent = 'No matching tasks';
+                emptyState.querySelector('p').textContent = 'Try changing your search or filters';
+            } else if (hasSearch) {
+                emptyState.querySelector('h3').textContent = 'No matching tasks';
+                emptyState.querySelector('p').textContent = 'Try a different search term';
+            } else if (hasActiveFilters) {
                 emptyState.querySelector('h3').textContent = 'No tasks found';
                 emptyState.querySelector('p').textContent = 'Try adjusting your filters';
             } else {
