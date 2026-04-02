@@ -3,26 +3,57 @@
  * CP476A Internet Computing - Winter 2026
  *
  * Handles user registration, login, and logout logic.
- * For Milestone 02, these are stub implementations that return
- * placeholder responses. Full database integration will be
- * completed in Milestone 03.
+ * Uses the MySQL database defined in server/config/database.js.
  */
 
 const bcrypt = require('bcrypt');
-// const { pool } = require('../config/database');
+const { pool } = require('../config/database');
 
 const SALT_ROUNDS = 10;
+
+/**
+ * Normalize a request value into a trimmed string.
+ */
+function normalizeString(value) {
+    if (value === undefined || value === null) {
+        return '';
+    }
+
+    return String(value).trim();
+}
+
+/**
+ * Persist the authenticated user in the session store.
+ */
+function saveUserSession(req, user) {
+    return new Promise(function (resolve, reject) {
+        req.session.userId = user.id;
+        req.session.username = user.username;
+        req.session.email = user.email;
+
+        req.session.save(function (error) {
+            if (error) {
+                reject(error);
+                return;
+            }
+
+            resolve();
+        });
+    });
+}
 
 /**
  * POST /api/auth/register
  * Register a new user account.
  *
  * Expected body: { username, email, password }
- * Validates input, hashes password, stores in database.
+ * Validates input, hashes password, and stores the user in MySQL.
  */
 async function register(req, res) {
     try {
-        var { username, email, password } = req.body;
+        var username = normalizeString(req.body.username);
+        var email = normalizeString(req.body.email).toLowerCase();
+        var password = normalizeString(req.body.password);
 
         // Input validation
         if (!username || !email || !password) {
@@ -57,23 +88,52 @@ async function register(req, res) {
             });
         }
 
+        // Check for duplicate username/email first so the UI gets a clean message.
+        var [existingUsers] = await pool.execute(
+            'SELECT username, email FROM users WHERE username = ? OR email = ? LIMIT 1',
+            [username, email]
+        );
+
+        if (existingUsers.length > 0) {
+            var existingUser = existingUsers[0];
+            var duplicateMessage = existingUser.email === email
+                ? 'An account with that email already exists.'
+                : 'That username is already taken.';
+
+            return res.status(409).json({
+                success: false,
+                message: duplicateMessage
+            });
+        }
+
         // Hash the password
         var passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
 
-        // TODO (Milestone 03): Insert user into database
-        // const [result] = await pool.execute(
-        //     'INSERT INTO users (username, email, password_hash) VALUES (?, ?, ?)',
-        //     [username, email, passwordHash]
-        // );
+        // Insert the new user into the database
+        var [result] = await pool.execute(
+            'INSERT INTO users (username, email, password_hash) VALUES (?, ?, ?)',
+            [username, email, passwordHash]
+        );
 
-        // Stub response for Milestone 02
         res.status(201).json({
             success: true,
-            message: 'Account created successfully.'
+            message: 'Account created successfully.',
+            user: {
+                id: result.insertId,
+                username: username,
+                email: email
+            }
         });
-
     } catch (error) {
         console.error('Registration error:', error);
+
+        if (error.code === 'ER_DUP_ENTRY') {
+            return res.status(409).json({
+                success: false,
+                message: 'An account with that email or username already exists.'
+            });
+        }
+
         res.status(500).json({
             success: false,
             message: 'Registration failed. Please try again.'
@@ -86,11 +146,11 @@ async function register(req, res) {
  * Authenticate a user and create a session.
  *
  * Expected body: { email, password }
- * Verifies credentials and sets session data.
  */
 async function login(req, res) {
     try {
-        var { email, password } = req.body;
+        var email = normalizeString(req.body.email).toLowerCase();
+        var password = normalizeString(req.body.password);
 
         // Input validation
         if (!email || !password) {
@@ -100,35 +160,35 @@ async function login(req, res) {
             });
         }
 
-        // TODO (Milestone 03): Query user from database
-        // const [rows] = await pool.execute(
-        //     'SELECT * FROM users WHERE email = ?',
-        //     [email]
-        // );
-        // var user = rows[0];
-        //
-        // if (!user || !(await bcrypt.compare(password, user.password_hash))) {
-        //     return res.status(401).json({
-        //         success: false,
-        //         message: 'Invalid email or password.'
-        //     });
-        // }
-        //
-        // // Set session
-        // req.session.userId = user.user_id;
-        // req.session.username = user.username;
+        // Query user from database
+        var [rows] = await pool.execute(
+            'SELECT user_id, username, email, password_hash FROM users WHERE email = ? LIMIT 1',
+            [email]
+        );
+        var user = rows[0];
 
-        // Stub response for Milestone 02
+        // Verify credentials
+        if (!user || !(await bcrypt.compare(password, user.password_hash))) {
+            return res.status(401).json({
+                success: false,
+                message: 'Invalid email or password.'
+            });
+        }
+
+        var sessionUser = {
+            id: user.user_id,
+            username: user.username,
+            email: user.email
+        };
+
+        // Set session
+        await saveUserSession(req, sessionUser);
+
         res.json({
             success: true,
             message: 'Login successful.',
-            user: {
-                id: 1,
-                username: 'demo_user',
-                email: email
-            }
+            user: sessionUser
         });
-
     } catch (error) {
         console.error('Login error:', error);
         res.status(500).json({
@@ -143,6 +203,13 @@ async function login(req, res) {
  * Destroy the user's session and log them out.
  */
 function logout(req, res) {
+    if (!req.session) {
+        return res.json({
+            success: true,
+            message: 'Logged out successfully.'
+        });
+    }
+
     req.session.destroy(function (err) {
         if (err) {
             return res.status(500).json({
@@ -150,6 +217,10 @@ function logout(req, res) {
                 message: 'Logout failed.'
             });
         }
+
+        // Clear the session cookie after destroying the server session.
+        res.clearCookie('connect.sid');
+
         res.json({
             success: true,
             message: 'Logged out successfully.'
@@ -173,7 +244,8 @@ function getCurrentUser(req, res) {
         success: true,
         user: {
             id: req.session.userId,
-            username: req.session.username
+            username: req.session.username,
+            email: req.session.email
         }
     });
 }
