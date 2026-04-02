@@ -48,7 +48,7 @@ app.use(session({
 }));
 
 // Serve static files from the front-end directory
-app.use(express.static(path.join(__dirname, '..', 'Frontend')));
+app.use(express.static(path.join(__dirname, '..', 'frontend')));
 
 // ---- API Routes ----
 
