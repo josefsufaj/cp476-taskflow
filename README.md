@@ -157,8 +157,8 @@ The front-end can run independently using mock data stored in the browser's loca
 | Milestone | Due Date | Status |
 |-----------|----------|--------|
 | M01 - Planning & Design | Jan 30, 2026 | ✅ Complete |
-| M02 - Front-End & Database | Feb 27, 2026 | ✅ Complete|
-| M03 - Full Integration & Demo | Apr 3, 2026 | 🔄 Pending |
+| M02 - Front-End & Database | Feb 27, 2026 | ✅ Complete |
+| M03 - Full Integration & Demo | Apr 5, 2026 | ✅ Complete |
 
 ---
 
@@ -176,4 +176,4 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ---
 
-*Last updated: February 26, 2026*
+*Last updated: April 5, 2026*
