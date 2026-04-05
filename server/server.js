@@ -7,6 +7,7 @@
  */
 
 const express = require('express');
+const fs = require('fs');
 const path = require('path');
 const session = require('express-session');
 
@@ -26,6 +27,9 @@ const taskRoutes = require('./routes/taskRoutes');
 // Initialize Express app
 const app = express();
 const PORT = process.env.PORT || 3000;
+const frontendDir = fs.existsSync(path.join(__dirname, '..', 'Frontend'))
+    ? path.join(__dirname, '..', 'Frontend')
+    : path.join(__dirname, '..', 'frontend');
 
 // ---- Middleware ----
 
@@ -48,7 +52,7 @@ app.use(session({
 }));
 
 // Serve static files from the front-end directory
-app.use(express.static(path.join(__dirname, '..', 'frontend')));
+app.use(express.static(frontendDir));
 
 // ---- API Routes ----
 
